@@ -1,0 +1,130 @@
+version: "3"
+
+services:
+  php:
+    container_name: php
+    build:
+      context: .
+      dockerfile: .docker/php/Dockerfile
+    working_dir: /var/www/html
+    volumes:
+      - .:/var/www/html
+      - .docker/php/custom.ini:/usr/local/etc/php/php.ini
+    environment:
+      - APP_ENV=local
+      - APP_DEBUG=true
+      - APP_KEY=i53weLzCSdunQzNc2SXR2AE9XJVDuNaq
+      - DB_HOST=db
+      - DB_DATABASE=teste-docker
+      - DB_USERNAME=root
+      - DB_PASSWORD=root
+    depends_on:
+      - db
+    env_file:
+        - docker-compose.env
+    links:
+        - elasticsearch1
+        - elasticsearch2
+        - redis
+    ports:
+      - 9004:9000
+    networks:
+      - service_net
+
+  chrome:
+    image: robcherry/docker-chromedriver
+    networks:
+      - service_net
+    environment:
+      CHROMEDRIVER_WHITELISTED_IPS: ""
+      CHROMEDRIVER_PORT: "9515"
+    ports:
+      - 9516:9515
+    cap_add:
+      - "SYS_ADMIN"
+    links:
+      - php
+      - nginx:teste-laravel-9.test
+
+  db:
+    container_name: db
+    image: mysql:5.7
+    volumes:
+      - dbdata:/var/lib/mysql
+      - .docker/db/db/:/docker-entrypoint-initdb.d
+    ports:
+      - 3308:3306
+    restart: always
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=teste-docker
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=root
+    networks:
+      - service_net
+
+  nginx:
+    container_name: nginx
+    build:
+      context: .
+      dockerfile: ./.docker/nginx/Dockerfile
+    volumes:
+      - .docker/nginx/nginx-local.conf:/etc/nginx/nginx.conf
+      - .:/var/www/html
+    ports:
+      - 8083:80
+    depends_on:
+      - php
+    links:
+      - php
+    networks:
+      - service_net
+
+  elasticsearch1:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.7.0
+    container_name: elasticSearch1
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    environment:
+      discovery.type: "single-node"
+      ES_JAVA_OPTS: "-Xms2g -Xmx2g"
+      xpack.monitoring.enabled: "true"
+    volumes:
+      - ./esdata:/usr/share/elasticsearch/data
+
+  elasticsearch2:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.7.0
+    container_name: elasticSearch2
+    environment:
+      discovery.type: "single-node"
+      ES_JAVA_OPTS: "-Xms2g -Xmx2g"
+      xpack.monitoring.enabled: "true"
+    volumes:
+      - ./esdata2:/usr/share/elasticsearch/data
+
+  redis:
+    image: 'bitnami/redis:latest'
+    container_name: redis
+    environment:
+      - ALLOW_EMPTY_PASSWORD=yes
+    volumes:
+      - redisdata:/bitnami/redis/data
+    ports:
+      - 6381:6379
+    networks:
+      - service_net
+
+volumes:
+  esdata1:
+    driver: local
+  esdata2:
+    driver: local
+  redisdata:
+    driver: local
+  dbdata:
+    driver: local
+
+networks:
+    service_net:
+      driver: bridge
